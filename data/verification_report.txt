@@ -1,0 +1,16 @@
+======================================================================
+PYTHON INTERNAL VERIFICATION
+======================================================================
+1. DEA primal (envelopment) vs dual (multiplier), 2025 VRS netted:
+   max |primal - dual| = 2.78e-16   (AGREE)
+   mean efficiency = 0.2931
+2. Returns to scale: CRS vs VRS efficiency Spearman = 0.6536
+3. Netting removes the prior-year spike at the OUTPUT level:
+   corr(spike, raw averted)         = +0.336   (large: mechanical)
+   corr(spike, OLS-netted averted)  = -0.032   (near zero)
+   corr(spike, Poisson-netted avtd) = +0.008   (near zero; robust to form)
+
+Verdict: primal==dual confirms the DEA LP is correctly specified; the
+contamination signature survives precinct-clustering and is removed by
+netting under both OLS and Poisson reversion. recon_python.csv lists the
+values the R port must reproduce.

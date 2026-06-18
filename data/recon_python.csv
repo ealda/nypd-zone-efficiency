@@ -1,0 +1,7 @@
+metric,python_value
+dea2025_mean_eff_vrs_net,0.2931
+dea2025_primal_dual_maxgap,0.0
+dea2025_crs_vrs_spearman,0.6536
+corr_spike_av_raw,0.336
+corr_spike_av_net_ols,-0.0323
+corr_spike_av_net_poisson,0.0077

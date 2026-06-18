@@ -1,0 +1,39 @@
+======================================================================
+PRECINCT-SUMMER PANEL + RTM-NETTED FRONTIER (first pass)
+======================================================================
+Precincts: 77   Target years: 2012-2025   Rows: 1077
+
+RTM mean-reversion model  s_Y = b0 + b1*s_(Y-1) + b2*mean3   (fit 2012-2022)
+  shoot : b0=1.40  b1(prior yr)=0.217  b2(3yr mean)=0.601   [b1<1 and b2>0 => reversion]
+  viol  : b0=1.43  b1(prior yr)=0.483  b2(3yr mean)=0.525   [b1<1 and b2>0 => reversion]
+
+DEA input-oriented VRS  (input: summer arrests; outputs: averted shootings+violence)
+  Spearman rank corr between RAW-output and NETTED-output efficiency, by year:
+   2012: rho=+0.800  frontier raw=6 net=7 overlap=6  n=76
+   2013: rho=+0.890  frontier raw=6 net=8 overlap=4  n=77
+   2014: rho=+0.907  frontier raw=6 net=7 overlap=6  n=77
+   2015: rho=+0.908  frontier raw=5 net=7 overlap=4  n=77
+   2016: rho=+0.917  frontier raw=4 net=3 overlap=3  n=77
+   2017: rho=+0.897  frontier raw=7 net=7 overlap=6  n=77
+   2018: rho=+0.912  frontier raw=4 net=4 overlap=3  n=77
+   2019: rho=+0.848  frontier raw=4 net=4 overlap=4  n=77
+   2020: rho=+0.890  frontier raw=3 net=4 overlap=3  n=77
+   2021: rho=+0.903  frontier raw=7 net=7 overlap=6  n=77
+   2022: rho=+0.723  frontier raw=4 net=3 overlap=3  n=77
+   2023: rho=+0.894  frontier raw=8 net=5 overlap=4  n=77
+   2024: rho=+0.908  frontier raw=5 net=6 overlap=4  n=77
+   2025: rho=+0.917  frontier raw=6 net=5 overlap=5  n=77
+  Mean rho across years: 0.880
+
+FINGERPRINT regression  inefficiency = a + b*std(prior-yr spike)
+  (b<0 => precincts that spiked last year look MORE efficient = RTM signature)
+  raw-output efficiency: b=-0.0594  t=-7.08   (RTM SIGNATURE present)
+  net-output efficiency: b=-0.0117  t=-1.35   (no signature)
+
+SFA (2025, half-normal) cross-check:
+  converged=True  logLik=-50.0  slope(log arr)=+0.241  lambda(=su/sv)=1.42
+
+Interpretation: RAW vs NETTED rankings are correlated but not identical (rho<1,
+with sizable frontier turnover). The fingerprint pins down the systematic part:
+under RAW outputs, last-year-spike precincts are scored more efficient; netting
+removes that loading. So RTM does propagate into the raw efficiency scores.

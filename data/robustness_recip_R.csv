@@ -1,0 +1,4 @@
+input,zone_coef,ci_lo,ci_hi
+arr,0.1149,0.0904,0.1394
+arr_fel,0.1496,0.1255,0.1737
+arr_struct,0.133,0.1088,0.1572
