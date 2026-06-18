@@ -14,21 +14,26 @@ P <- fread(if (file.exists("data/fingerprint_recip_R.csv")) "data/fingerprint_re
 P <- P[abs(z)<3 & is.finite(eff_raw) & is.finite(eff_adj)]
 P[, `:=`(er=eff_raw, en=eff_adj)]
 P[, bin:=cut(z, breaks=seq(min(z),max(z),length.out=11))]
-g <- P[, .(z=mean(z), er=mean(er), en=mean(en)), by=bin][!is.na(z)]
-d <- rbind(data.table(z=g$z,eff=g$er,Series="Raw year-over-year drop"),
-           data.table(z=g$z,eff=g$en,Series="Adjusted for the rebound"))
+g <- P[, .(z=mean(z), er=mean(er), en=mean(en)), by=bin][!is.na(bin)]
+LV <- c("Raw year-over-year drop","Adjusted for the rebound")   # Raw first, matches Python
+d <- rbind(data.table(z=g$z,eff=g$er,Series=LV[1]),
+           data.table(z=g$z,eff=g$en,Series=LV[2]))
+ln <- rbind(data.table(z=P$z,eff=P$er,Series=LV[1]),
+            data.table(z=P$z,eff=P$en,Series=LV[2]))
+d[, Series:=factor(Series, levels=LV)]; ln[, Series:=factor(Series, levels=LV)]
 p1 <- ggplot(d, aes(z,eff,color=Series)) +
   geom_point(size=2.4) +
-  geom_smooth(data=rbind(data.table(z=P$z,eff=P$er,Series="Raw year-over-year drop"),
-                         data.table(z=P$z,eff=P$en,Series="Adjusted for the rebound")),
-              method="lm", se=FALSE, linewidth=1) +
-  scale_color_manual(values=c("Raw year-over-year drop"=RED,"Adjusted for the rebound"=BLUE)) +
+  geom_smooth(data=ln, aes(linetype=Series), method="lm", se=FALSE, linewidth=1) +
+  scale_color_manual(values=setNames(c(RED,BLUE),LV)) +
+  scale_linetype_manual(values=setNames(c("solid","dashed"),LV)) +
   labs(title="Precinct efficiency versus the prior-year crime spike",
-       subtitle="Efficiency score by prior-year spike (binned means, 77 precincts, 2012-2025)",
-       x="Prior-year crime spike (s.d. above precinct trend)",
-       y="Efficiency (higher = more efficient)",
-       caption="NYPD data via NYC Open Data. R/ggplot2.", color=NULL) +
-  th + theme(legend.position="top")
+       subtitle="Efficiency score by how far above its own trend the precinct ran the prior year (binned means, 77 precincts, 2012–2025).",
+       x="Prior-year crime spike (standard deviations above precinct trend)",
+       y="Efficiency score (higher = more efficient)",
+       caption="NYPD complaint + shooting data via NYC Open Data. Calculation by author.",
+       color=NULL, linetype=NULL) +
+  th + theme(legend.position=c(0.01,0.99), legend.justification=c(0,1),
+             legend.background=element_blank(), legend.key=element_blank())
 ggsave("figs_R/fig1_fingerprint.png", p1, width=8.6, height=5.2, dpi=130)
 
 # ---- Figure 2: zone-era efficiency gap under three deployment proxies -------
