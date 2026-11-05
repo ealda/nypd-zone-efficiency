@@ -1,5 +1,5 @@
 //@version=6
-// EMA 20 · Plan 50K: strategy version (backtest + buy/sell signals + alerts)
+// EMA 20 - Plan 50K: strategy version (backtest + buy/sell signals + alerts)
 // Built from abel.nq's guide "La EMA en la 50K" (LucidFlex 50K, no DLL) and his published indicator.
 // The signal logic is a line-for-line port of that indicator; this file adds orders, exits, sizing and alerts.
 //
@@ -10,126 +10,125 @@
 //   Only inside the New York time window, max N signals per day. Fixed TP / SL per plan.
 //
 // Plans (from the guide):
-//   Evaluation            1 mini  ($20/pt)  TP 75 pts (+$1,500)  SL 100 pts (-$2,000, the whole cushion)  from 9:00 NY
-//   Funded · big day      2 minis ($40/pt)  TP 100 pts (+$4,000) SL 50 pts  (-$2,000)                     from 9:00 NY
-//   Funded · small day    3 micros ($6/pt)  TP 25 pts (+$150)    SL = whatever cushion is left (points)  from 3:00 NY
+//   Evaluation          1 mini  ($20/pt)  TP 75 pts (+1500)   SL 100 pts (-2000, the whole cushion)   from 9:00 NY
+//   Funded - big day    2 minis ($40/pt)  TP 100 pts (+4000)  SL 50 pts  (-2000)                      from 9:00 NY
+//   Funded - small day  3 micros ($6/pt)  TP 25 pts (+150)    SL = remaining cushion in points         from 3:00 NY
 //
-// Sizing: contracts = plan $/pt ÷ the chart symbol's point value.
-//   MNQ1!: eval 10, big day 20, small day 3 (all whole numbers, so use MNQ1! for backtests)
-//   NQ1!:  eval 1,  big day 2,  small day 0.3 (fractional; small day only sizes correctly on MNQ1!)
-strategy("EMA 20 · Plan 50K Strategy", overlay = true, initial_capital = 50000, currency = currency.USD,
-     pyramiding = 0, margin_long = 0, margin_short = 0, process_orders_on_close = false,
-     max_lines_count = 300, max_labels_count = 300)
+// Sizing: contracts = plan $/pt / chart symbol point value.
+//   MNQ1!: eval 10, big day 20, small day 3   (whole numbers: use MNQ1! for backtests)
+//   NQ1!:  eval 1,  big day 2,  small day 0.3 (small day only sizes correctly on MNQ1!)
+strategy("EMA 20 Plan 50K Strategy", overlay = true, initial_capital = 50000, pyramiding = 0, margin_long = 0, margin_short = 0, max_lines_count = 300, max_labels_count = 300)
 
-// ───────── Inputs ─────────
+// ---------- Inputs ----------
+PLAN_EVAL  = "Evaluation"
+PLAN_BIG   = "Funded - big day"
+PLAN_SMALL = "Funded - small day"
+
 emaLen    = input.int(20, "EMA length", minval = 2)
-plan      = input.string("Evaluation", "Plan", options = ["Evaluation", "Funded · big day", "Funded · small day"])
+plan      = input.string(PLAN_EVAL, "Plan", options = [PLAN_EVAL, PLAN_BIG, PLAN_SMALL])
 startHr   = input.int(9, "From hour (NY)", minval = 0, maxval = 23, tooltip = "Evaluation and big day: 9. Small days always start at 3.")
 endHr     = input.int(15, "Until hour (NY)", minval = 1, maxval = 24)
 maxPerDay = input.int(1, "Signals per day", minval = 1)
-smallSl   = input.float(300, "Small-day stop (points)", minval = 1,
-     tooltip = "On small days the stop is all the cushion the account has left, in points (3 micros = $6 per point). Example: $1,800 cushion ÷ 6 = 300 pts.")
-useFlat   = input.bool(true, "Flatten open trade at", inline = "flat", group = "Session")
-flatHr    = input.int(16, "", minval = 0, maxval = 23, inline = "flat", group = "Session")
-flatMin   = input.int(45, ":", minval = 0, maxval = 59, inline = "flat", group = "Session",
-     tooltip = "NY time. The guide closes trades that are still open at the end of the session. Check your prop firm's flat-by time.")
+smallSl   = input.float(300.0, "Small-day stop (points)", minval = 1.0, tooltip = "Remaining account cushion in points. 3 micros = 6 USD per point, so 1800 USD of cushion = 300 pts.")
+useFlat   = input.bool(true, "Flatten open trade", group = "Session")
+flatHr    = input.int(16, "Flatten hour (NY)", minval = 0, maxval = 23, group = "Session")
+flatMin   = input.int(45, "Flatten minute", minval = 0, maxval = 59, group = "Session", tooltip = "The guide closes trades still open at the end of the session. Use your prop firm's flat-by time.")
 drawLines = input.bool(true, "Draw entry, TP and SL", group = "Display")
 showPanel = input.bool(true, "Show plan panel", group = "Display")
 
-// ───────── Plan parameters ─────────
-isEval  = plan == "Evaluation"
-isBig   = plan == "Funded · big day"
-isSmall = plan == "Funded · small day"
+// ---------- Plan parameters ----------
+isEval  = plan == PLAN_EVAL
+isBig   = plan == PLAN_BIG
+isSmall = plan == PLAN_SMALL
 
-tpPts   = isEval ? 75.0 : isBig ? 100.0 : 25.0
-slPts   = isEval ? 100.0 : isBig ? 50.0 : smallSl
-usdPt   = isEval ? 20.0 : isBig ? 40.0 : 6.0
-qty     = usdPt / syminfo.pointvalue
-qtyOk   = math.abs(qty - math.round(qty)) < 1e-9 and qty >= 1
+float tpPts = isEval ? 75.0 : isBig ? 100.0 : 25.0
+float slPts = isEval ? 100.0 : isBig ? 50.0 : smallSl
+float usdPt = isEval ? 20.0 : isBig ? 40.0 : 6.0
+float qty   = usdPt / syminfo.pointvalue
+bool qtyOk  = math.abs(qty - math.round(qty)) < 0.000001 and qty >= 1
 
-// ───────── Signal (identical to the original indicator) ─────────
+// ---------- Signal (identical to the original indicator) ----------
 e20 = ta.ema(close, emaLen)
 plot(e20, "EMA", color = color.rgb(47, 91, 211), linewidth = 3)
 
-tz     = "America/New_York"
-h      = hour(time, tz)          // hour of the signal bar's OPEN, as in the original
-nyDay  = dayofmonth(time, tz)
-iniHr  = isSmall ? 3 : startHr
-inHour = h >= iniHr and h < endHr
+TZ = "America/New_York"
+int barHr  = hour(time, TZ)
+int nyDay  = dayofmonth(time, TZ)
+int iniHr  = isSmall ? 3 : startHr
+bool inHour = barHr >= iniHr and barHr < endHr
 
 var int sigCount = 0
 if nyDay != nyDay[1]
     sigCount := 0
 
 // e20[1] = the EMA before this bar. Direction compares this bar's EMA with the previous one.
-longSig  = inHour and sigCount < maxPerDay and e20 > e20[1] and low  <= e20[1] and close > e20[1]
-shortSig = inHour and sigCount < maxPerDay and e20 < e20[1] and high >= e20[1] and close < e20[1]
-sig = longSig ? 1 : shortSig ? -1 : 0
+bool longSig  = inHour and sigCount < maxPerDay and e20 > e20[1] and low <= e20[1] and close > e20[1]
+bool shortSig = inHour and sigCount < maxPerDay and e20 < e20[1] and high >= e20[1] and close < e20[1]
+int sig = longSig ? 1 : shortSig ? -1 : 0
 
 if sig != 0
     sigCount += 1
-    label.new(bar_index, longSig ? low : high, longSig ? "LONG" : "SHORT",
-         style = longSig ? label.style_label_up : label.style_label_down,
-         color = longSig ? color.rgb(14, 148, 96) : color.rgb(220, 42, 71), textcolor = color.white, size = size.small)
-
-// ───────── Orders ─────────
-// Orders placed on the signal bar's close fill at the next bar's open (process_orders_on_close = false).
-// TP / SL are in ticks from the actual fill price.
-tpTicks = math.round(tpPts / syminfo.mintick)
-slTicks = math.round(slPts / syminfo.mintick)
-
-alertJson(string side) =>
-    '{"action":"' + side + '","plan":"' + plan + '","symbol":"' + syminfo.ticker + '","qty":' + str.tostring(qty) +
-     ',"tp_pts":' + str.tostring(tpPts) + ',"sl_pts":' + str.tostring(slPts) + '}'
-
-if sig != 0 and strategy.position_size == 0
-    if sig == 1
-        strategy.entry("Long", strategy.long, qty = qty, alert_message = alertJson("buy"))
-        strategy.exit("TP/SL Long", "Long", profit = tpTicks, loss = slTicks, alert_message = '{"action":"exit_long"}')
+    if longSig
+        label.new(bar_index, low, "LONG", style = label.style_label_up, color = color.rgb(14, 148, 96), textcolor = color.white, size = size.small)
     else
-        strategy.entry("Short", strategy.short, qty = qty, alert_message = alertJson("sell"))
-        strategy.exit("TP/SL Short", "Short", profit = tpTicks, loss = slTicks, alert_message = '{"action":"exit_short"}')
-    alert((sig == 1 ? "EMA 20 LONG signal" : "EMA 20 SHORT signal") + " · " + plan + " · enter at next bar open · TP " +
-         str.tostring(tpPts) + " pts / SL " + str.tostring(slPts) + " pts", alert.freq_once_per_bar_close)
+        label.new(bar_index, high, "SHORT", style = label.style_label_down, color = color.rgb(220, 42, 71), textcolor = color.white, size = size.small)
+
+// ---------- Orders ----------
+// Orders placed on the signal bar's close fill at the next bar's open.
+// TP / SL are in ticks from the actual fill price.
+float tpTicks = math.round(tpPts / syminfo.mintick)
+float slTicks = math.round(slPts / syminfo.mintick)
+
+string jsonTail = '","plan":"' + plan + '","symbol":"' + syminfo.ticker + '","qty":' + str.tostring(qty) + ',"tp_pts":' + str.tostring(tpPts) + ',"sl_pts":' + str.tostring(slPts) + '}'
+string jsonBuy  = '{"action":"buy' + jsonTail
+string jsonSell = '{"action":"sell' + jsonTail
+
+if sig == 1 and strategy.position_size == 0
+    strategy.entry("Long", strategy.long, qty = qty, alert_message = jsonBuy)
+    strategy.exit("TP/SL Long", "Long", profit = tpTicks, loss = slTicks, alert_message = '{"action":"exit_long"}')
+    alert("EMA 20 LONG signal - " + plan + " - enter at next bar open - TP " + str.tostring(tpPts) + " pts / SL " + str.tostring(slPts) + " pts", alert.freq_once_per_bar_close)
+
+if sig == -1 and strategy.position_size == 0
+    strategy.entry("Short", strategy.short, qty = qty, alert_message = jsonSell)
+    strategy.exit("TP/SL Short", "Short", profit = tpTicks, loss = slTicks, alert_message = '{"action":"exit_short"}')
+    alert("EMA 20 SHORT signal - " + plan + " - enter at next bar open - TP " + str.tostring(tpPts) + " pts / SL " + str.tostring(slPts) + " pts", alert.freq_once_per_bar_close)
 
 // Flatten anything still open at the flat-by time (bar CLOSE time in NY, before the 18:00 reopen).
-closeMins = hour(time_close, tz) * 60 + minute(time_close, tz)
-flatMins  = flatHr * 60 + flatMin
+int closeMins = hour(time_close, TZ) * 60 + minute(time_close, TZ)
+int flatMins  = flatHr * 60 + flatMin
 if useFlat and strategy.position_size != 0 and closeMins >= flatMins and closeMins < 18 * 60
     strategy.close_all(comment = "Session flat", alert_message = '{"action":"flatten"}')
 
-// ───────── Drawing ─────────
+// ---------- Drawing ----------
 // Entry = open of the bar after the signal.
-if drawLines and nz(sig[1]) != 0
-    d   = sig[1]
-    ent = open
-    tp  = ent + d * tpPts
-    sl  = ent - d * slPts
+int prevSig = nz(sig[1])
+if drawLines and prevSig != 0
+    float ent = open
+    float tpLvl = ent + prevSig * tpPts
+    float slLvl = ent - prevSig * slPts
     line.new(bar_index, ent, bar_index + 24, ent, color = color.rgb(21, 24, 29), style = line.style_dashed, width = 2)
-    line.new(bar_index, tp, bar_index + 24, tp, color = color.rgb(14, 148, 96), width = 3)
-    line.new(bar_index, sl, bar_index + 24, sl, color = color.rgb(220, 42, 71), width = 3)
-    label.new(bar_index + 24, tp, "TP " + str.tostring(tpPts, "#") + " pts", style = label.style_label_left,
-         color = color.rgb(14, 148, 96), textcolor = color.white, size = size.small)
-    label.new(bar_index + 24, sl, "SL " + str.tostring(slPts, "#") + " pts", style = label.style_label_left,
-         color = color.rgb(220, 42, 71), textcolor = color.white, size = size.small)
+    line.new(bar_index, tpLvl, bar_index + 24, tpLvl, color = color.rgb(14, 148, 96), width = 3)
+    line.new(bar_index, slLvl, bar_index + 24, slLvl, color = color.rgb(220, 42, 71), width = 3)
+    label.new(bar_index + 24, tpLvl, "TP " + str.tostring(tpPts, "#") + " pts", style = label.style_label_left, color = color.rgb(14, 148, 96), textcolor = color.white, size = size.small)
+    label.new(bar_index + 24, slLvl, "SL " + str.tostring(slPts, "#") + " pts", style = label.style_label_left, color = color.rgb(220, 42, 71), textcolor = color.white, size = size.small)
 
 bgcolor(inHour ? color.new(color.rgb(47, 91, 211), 94) : na, title = "Trading window")
 
-// ───────── Plan panel ─────────
+// ---------- Plan panel ----------
 var table panel = table.new(position.top_right, 2, 7, bgcolor = color.new(color.black, 15), border_width = 1)
 if showPanel and barstate.islast
-    tfOk = timeframe.period == "5"
+    bool tfOk = timeframe.period == "5"
     table.cell(panel, 0, 0, "Plan", text_color = color.white)
     table.cell(panel, 1, 0, plan, text_color = color.white)
-    table.cell(panel, 0, 1, "Contracts (" + syminfo.ticker + ")", text_color = color.white)
+    table.cell(panel, 0, 1, "Contracts " + syminfo.ticker, text_color = color.white)
     table.cell(panel, 1, 1, str.tostring(qty, "#.##"), text_color = qtyOk ? color.white : color.orange)
     table.cell(panel, 0, 2, "TP", text_color = color.white)
-    table.cell(panel, 1, 2, str.tostring(tpPts, "#") + " pts = +$" + str.tostring(tpPts * usdPt, "#,###"), text_color = color.lime)
+    table.cell(panel, 1, 2, str.tostring(tpPts, "#") + " pts = +" + str.tostring(tpPts * usdPt, "#") + " USD", text_color = color.lime)
     table.cell(panel, 0, 3, "SL", text_color = color.white)
-    table.cell(panel, 1, 3, str.tostring(slPts, "#") + " pts = -$" + str.tostring(slPts * usdPt, "#,###"), text_color = color.red)
+    table.cell(panel, 1, 3, str.tostring(slPts, "#") + " pts = -" + str.tostring(slPts * usdPt, "#") + " USD", text_color = color.red)
     table.cell(panel, 0, 4, "Window (NY)", text_color = color.white)
-    table.cell(panel, 1, 4, str.tostring(iniHr) + ":00 – " + str.tostring(endHr) + ":00", text_color = color.white)
+    table.cell(panel, 1, 4, str.tostring(iniHr) + ":00 to " + str.tostring(endHr) + ":00", text_color = color.white)
     table.cell(panel, 0, 5, "Timeframe", text_color = color.white)
-    table.cell(panel, 1, 5, tfOk ? "5 min ✓" : timeframe.period + " (use 5 min)", text_color = tfOk ? color.white : color.orange)
-    table.cell(panel, 0, 6, "Note", text_color = color.white)
-    table.cell(panel, 1, 6, qtyOk ? "OK" : "Fractional size: use MNQ1!", text_color = qtyOk ? color.white : color.orange)
+    table.cell(panel, 1, 5, tfOk ? "5 min OK" : timeframe.period + " - use 5 min", text_color = tfOk ? color.white : color.orange)
+    table.cell(panel, 0, 6, "Size", text_color = color.white)
+    table.cell(panel, 1, 6, qtyOk ? "OK" : "Fractional - use MNQ1!", text_color = qtyOk ? color.white : color.orange)

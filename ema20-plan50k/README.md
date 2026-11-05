@@ -30,7 +30,7 @@ Two winning days of $1,500 pass the $3,000 evaluation target and keep the consis
 2. Open Pine Editor, paste `EMA20_Plan50K_Strategy.pine`, and click **Add to chart**.
 3. In Settings → Inputs, pick the **Plan**. For small days, enter **Small-day stop (points)** as your remaining cushion ÷ 6.
 4. Settings → Properties: add commissions and slippage. The script leaves both at zero, as the guide's numbers do.
-5. Alerts: Create alert → Condition: *EMA 20 · Plan 50K Strategy* → **"alert() function calls only"** for readable text, or **"Order fills only"** for JSON webhook messages (`{"action":"buy","plan":...,"qty":...,"tp_pts":...,"sl_pts":...}`).
+5. Alerts: Create alert → Condition: *EMA 20 Plan 50K Strategy* → **"alert() function calls only"** for readable text, or **"Order fills only"** for JSON webhook messages (`{"action":"buy","plan":...,"qty":...,"tp_pts":...,"sl_pts":...}`).
 
 The panel in the top-right corner shows contracts, TP and SL in dollars, and the window. It turns orange if the chart is not on 5 minutes or the size comes out fractional.
 
